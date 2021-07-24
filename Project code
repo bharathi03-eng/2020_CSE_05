@@ -1,0 +1,227 @@
+/***********************************************************************************************************************
+* DISCLAIMER
+* This software is supplied by Renesas Electronics Corporation and is only 
+* intended for use with Renesas products. No other uses are authorized. This 
+* software is owned by Renesas Electronics Corporation and is protected under 
+* all applicable laws, including copyright laws.
+* THIS SOFTWARE IS PROVIDED "AS IS" AND RENESAS MAKES NO WARRANTIES REGARDING 
+* THIS SOFTWARE, WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING BUT NOT 
+* LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE 
+* AND NON-INFRINGEMENT.  ALL SUCH WARRANTIES ARE EXPRESSLY DISCLAIMED.
+* TO THE MAXIMUM EXTENT PERMITTED NOT PROHIBITED BY LAW, NEITHER RENESAS 
+* ELECTRONICS CORPORATION NOR ANY OF ITS AFFILIATED COMPANIES SHALL BE LIABLE 
+* FOR ANY DIRECT, INDIRECT, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES FOR 
+* ANY REASON RELATED TO THIS SOFTWARE, EVEN IF RENESAS OR ITS AFFILIATES HAVE 
+* BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+* Renesas reserves the right, without notice, to make changes to this software 
+* and to discontinue the availability of this software.  By using this software, 
+* you agree to the additional terms and conditions found by accessing the 
+* following link:
+* http://www.renesas.com/disclaimer
+*
+* Copyright (C) 2010, 2011 Renesas Electronics Corporation. All rights reserved.
+***********************************************************************************************************************/
+
+/***********************************************************************************************************************
+* File Name    : r_main.c
+* Version      : CodeGenerator for RL78/G13 V1.03.01 [11 Oct 2011]
+* Device(s)    : R5F100LE
+* Tool-Chain   : CA78K0R
+* Description  : This file implements main function.
+* Creation Date: 5/20/2021
+***********************************************************************************************************************/
+
+/***********************************************************************************************************************
+Pragma directive
+***********************************************************************************************************************/
+/* Start user code for pragma. Do not edit comment generated here */
+/* End user code. Do not edit comment generated here */
+
+/***********************************************************************************************************************
+Includes
+***********************************************************************************************************************/
+#include "r_cg_macrodriver.h"
+#include "r_cg_cgc.h"
+#include "r_cg_port.h"
+#include "r_cg_serial.h"
+#include "r_cg_adc.h"
+/* Start user code for include. Do not edit comment generated here */
+
+#include "ALCD64.c"
+#include "ADC64.c"
+
+
+#define Ultrasonic_Obst P3.0
+
+#define LED_Light P5.0
+
+
+/* End user code. Do not edit comment generated here */
+#include "r_cg_userdefine.h"
+
+/***********************************************************************************************************************
+Global variables and functions
+***********************************************************************************************************************/
+/* Start user code for global. Do not edit comment generated here */
+
+extern unsigned char Rx_data_arr0[400], Rx_data_arr1[100];
+extern unsigned char Rx_count0, Rx_count1;
+extern unsigned char Rx_ST_Flag0, Rx_ST_Flag1;
+extern unsigned char Rx_data0, Rx_data1;
+
+unsigned int Send_Flag;
+
+
+unsigned char Disp_Line[17] = "T=00 S=000 L=000";
+unsigned char Tx_Arr[11]="T00S000U0@";
+
+
+
+void Device_Init( void );
+
+
+/* End user code. Do not edit comment generated here */
+
+/***********************************************************************************************************************
+* Function Name: main
+* Description  : This function implements main function.
+* Arguments    : None
+* Return Value : None
+***********************************************************************************************************************/
+void main(void)
+{
+    /* Start user code. Do not edit comment generated here */
+
+	unsigned char i;
+	
+	Device_Init( );    
+	MSDelay(1000);								
+
+	LED_Light = 1;
+	MSDelay(2000);
+	LED_Light = 0;
+	MSDelay(1000);
+
+	R_ADC_Start( );
+	ADC64_Start( 0x00 );
+
+	ALCD_Comm( 0x01 );								// Clear display Screen
+	MSDelay(500);
+
+	Rx_ST_Flag1 = 0;
+	Rx_count1 = 0;
+	while(1)
+	{
+		ADC64_Start(0x00);
+		Disp_Line[2] = Volt_Value[1];
+		Disp_Line[3] = Volt_Value[2];
+		ALCD_Message( 0x80, Disp_Line );
+		MSDelay(500);
+		Tx_Arr[1] = Volt_Value[1];
+		Tx_Arr[2] = Volt_Value[2];
+	
+		if( Volt_Temp >= 40 )
+		{
+			Send_Flag = 1;
+			ALCD_Message( 0xC0, "HIGH TEMPERATURE" );
+			MSDelay(2000);
+
+			ALCD_Message( 0xC0, "                " );
+		}
+
+
+		ADC64_Start(0x01);
+		Disp_Line[7] = Volt_Value[0];
+		Disp_Line[8] = Volt_Value[1];
+		Disp_Line[9] = Volt_Value[2];
+		ALCD_Message( 0x80, Disp_Line );
+		MSDelay(500);
+		Tx_Arr[4] = Volt_Value[0];
+		Tx_Arr[5] = Volt_Value[1];
+		Tx_Arr[6] = Volt_Value[2];
+
+		if( Volt_Temp >= 100 )
+		{
+			Send_Flag = 1;
+			ALCD_Message( 0xC0, "  HAZARDOUS GAS " );
+			MSDelay(2000);
+
+			ALCD_Message( 0xC0, "                " );
+		}  
+
+
+		ADC64_Start(0x02);
+		Disp_Line[13] = Volt_Value[0];
+		Disp_Line[14] = Volt_Value[1];
+		Disp_Line[15] = Volt_Value[2];
+		ALCD_Message( 0x80, Disp_Line );
+		MSDelay(500);
+
+		
+		if( Ultrasonic_Obst == 1 )
+		{
+			Send_Flag = 1;
+			Tx_Arr[8] = '1';
+			ALCD_Message( 0xC0, "OBSTACLE DETECT " );
+			MSDelay(2000);
+
+			ALCD_Message( 0xC0, "                " );
+		}  
+		else
+		{
+			Tx_Arr[8] = '0';
+		}		
+
+		
+		if( Send_Flag == 1 )
+		{
+			ALCD_Message( 0xC0, "  DATA UPDATE   " );
+			Send_Flag = 0;
+			R_UART1_Send( Tx_Arr, 10 );
+			MSDelay(2000);
+ 
+			ALCD_Message( 0xC0, "                " );
+			Rx_ST_Flag1 = 0;
+			Rx_count1 = 0;
+		}          
+
+		
+	}
+	
+	
+
+	while (1U)
+    {
+        ;
+    }
+    /* End user code. Do not edit comment generated here */
+}
+
+/* Start user code for adding. Do not edit comment generated here */
+
+
+
+void Device_Init( void )
+{
+	LED_Light = 0;
+	MSDelay(300);							// 0.5 sec delay
+	ALCD_Init( );
+
+	MSDelay(200);							// 0.5 sec delay
+	ALCD_Message( 0xC0, "    PERSONAL    " );
+	ALCD_Message( 0xC0, "   ASSISTANT   " );
+	MSDelay(2000);
+
+	R_SAU0_Create( );
+	R_UART0_Start( );
+	R_UART1_Start( );
+	R_UART1_Send( "UART1 BT@", 10 );
+	MSDelay(500);							// 0.5 sec delay
+
+}
+
+/* End user code. Do not edit comment generated here */
+
+
+
+
